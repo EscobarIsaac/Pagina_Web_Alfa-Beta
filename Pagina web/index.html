@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Algoritmos Minimax y Alfa-Beta</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            margin: 0;
+            padding: 0;
+        }
+        #menu {
+            background-color: #0056b3;
+            color: white;
+            padding: 10px;
+        }
+        #menu button {
+            margin: 5px;
+            padding: 10px 15px;
+            background-color: white;
+            color: #0056b3;
+            border: 1px solid #0056b3;
+            cursor: pointer;
+            border-radius: 5px;
+        }
+        #menu button:hover {
+            background-color: #0056b3;
+            color: white;
+        }
+        #canvas-container {
+            display: flex;
+            justify-content: center;
+            margin-top: 20px;
+        }
+        canvas {
+            border: 1px solid #ccc;
+            background-color: #f8f9fa;
+        }
+        .context-menu {
+            position: absolute;
+            background-color: white;
+            border: 1px solid #ccc;
+            box-shadow: 0px 0px 5px rgba(0, 0, 0, 0.2);
+            z-index: 1000;
+            display: none;
+            padding: 5px;
+        }
+        .context-menu button {
+            background-color: #ffffff;
+            color: #000000;
+            border: none;
+            padding: 5px;
+            width: 100%;
+            text-align: left;
+            cursor: pointer;
+        }
+        .context-menu button:hover {
+            background-color: #eeeeee;
+        }
+    </style>
+</head>
+<body>
+    <div id="menu">
+        <button onclick="createExampleTree()">Crear Árbol de Ejemplo</button>
+        <button onclick="clearTree()">Limpiar Árbol</button>
+        <button onclick="startCustomTree()">Crear Árbol Personalizado</button>
+        <button onclick="runAlphaBeta('example')">Mostrar Alfa y Beta Paso a Paso (Ejemplo)</button>
+        <button onclick="runAlphaBeta('custom')">Mostrar Alfa y Beta Paso a Paso (Personalizado)</button>
+    </div>
+    <div id="canvas-container">
+        <canvas id="treeCanvas" width="1200" height="800"></canvas>
+    </div>
+    <div id="context-menu" class="context-menu">
+        <button onclick="addNodes(1)">Agregar 1 Nodo</button>
+        <button onclick="addNodes(2)">Agregar 2 Nodos</button>
+        <button onclick="setNodeValue()">Asignar Valor</button>
+        <button onclick="deleteNode()">Eliminar Nodo</button>
+    </div>
+    <script>
+        const canvas = document.getElementById("treeCanvas");
+        const ctx = canvas.getContext("2d");
+        const contextMenu = document.getElementById("context-menu");
+
+        let tree = null; // Árbol de ejemplo
+        let customTree = null; // Árbol personalizado
+        let selectedNode = null;
+
+        // Estado para pasos de Alfa y Beta
+        let alphaBetaSteps = [];
+        let stepIndex = 0;
+
+        class Node {
+            constructor(x, y, isMax = true) {
+                this.x = x;
+                this.y = y;
+                this.isMax = isMax;
+                this.value = null;
+                this.children = [];
+            }
+
+            addChild(child) {
+                this.children.push(child);
+            }
+        }
+
+        function drawNode(node) {
+            ctx.beginPath();
+            ctx.arc(node.x, node.y, 20, 0, 2 * Math.PI);
+            ctx.fillStyle = "white";
+            ctx.fill();
+            ctx.strokeStyle = "black";
+            ctx.stroke();
+
+            if (node.value !== null) {
+                ctx.fillStyle = "black";
+                ctx.font = "12px Arial";
+                ctx.textAlign = "center";
+                ctx.fillText(node.value, node.x, node.y + 35);
+            }
+
+            ctx.fillStyle = node.isMax ? "green" : "red";
+            ctx.fillText(node.isMax ? "MAX" : "MIN", node.x, node.y - 30);
+        }
+
+        function drawTree(node, highlightNode = null) {
+            if (!node) return;
+
+            for (const child of node.children) {
+                ctx.beginPath();
+                ctx.strokeStyle = child === highlightNode ? "orange" : "black";
+                ctx.moveTo(node.x, node.y);
+                ctx.lineTo(child.x, child.y);
+                ctx.stroke();
+                drawTree(child, highlightNode);
+            }
+            drawNode(node);
+        }
+
+        function createExampleTree() {
+            clearTree();
+            tree = new Node(600, 100, true); // Raíz MAX
+            const left = new Node(400, 200, false);
+            const right = new Node(800, 200, false);
+
+            tree.addChild(left);
+            tree.addChild(right);
+
+            left.addChild(new Node(300, 300, true));
+            left.addChild(new Node(500, 300, true));
+
+            right.addChild(new Node(700, 300, true));
+            right.addChild(new Node(900, 300, true));
+
+            // Asignar valores a las hojas
+            left.children[0].addChild(new Node(250, 400, false));
+            left.children[0].addChild(new Node(350, 400, false));
+            left.children[1].addChild(new Node(450, 400, false));
+            left.children[1].addChild(new Node(550, 400, false));
+
+            right.children[0].addChild(new Node(650, 400, false));
+            right.children[0].addChild(new Node(750, 400, false));
+            right.children[1].addChild(new Node(850, 400, false));
+            right.children[1].addChild(new Node(950, 400, false));
+
+            const leaves = [...left.children[0].children, ...left.children[1].children, ...right.children[0].children, ...right.children[1].children];
+            leaves.forEach((leaf, index) => (leaf.value = index + 1));
+
+            drawTree(tree);
+        }
+
+        function clearTree() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            tree = null;
+            customTree = null;
+            alphaBetaSteps = [];
+            stepIndex = 0;
+        }
+
+        function startCustomTree() {
+            clearTree();
+            customTree = new Node(600, 100, true); // Raíz personalizada
+            drawTree(customTree);
+            alert("Clic derecho sobre el nodo para añadir o asignar valores.");
+        }
+
+        canvas.addEventListener("contextmenu", (e) => {
+            e.preventDefault();
+
+            const rect = canvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+
+            selectedNode = findClosestNode(x, y, customTree || tree);
+            if (selectedNode) {
+                showContextMenu(e.clientX, e.clientY);
+            }
+        });
+
+        function findClosestNode(x, y, root) {
+            const queue = [root];
+            while (queue.length) {
+                const node = queue.shift();
+                const dx = x - node.x;
+                const dy = y - node.y;
+                if (Math.sqrt(dx * dx + dy * dy) <= 20) return node;
+                queue.push(...node.children);
+            }
+            return null;
+        }
+
+        function addNodes(count) {
+            if (!selectedNode) return;
+
+            const yOffset = 100;
+            const xOffset = 120;
+
+            for (let i = 0; i < count; i++) {
+                const x = selectedNode.x - xOffset + i * xOffset * 2;
+                const y = selectedNode.y + yOffset;
+                const newNode = new Node(x, y, !selectedNode.isMax);
+                selectedNode.addChild(newNode);
+            }
+
+            adjustTree(customTree || tree);
+            drawTree(customTree || tree);
+            hideContextMenu();
+        }
+
+        function adjustTree(node, level = 0, xStart = 50, xSpacing = 100) {
+            if (!node) return;
+
+            if (node.children.length) {
+                let xCurrent = xStart;
+                const xIncrement = xSpacing;
+
+                for (const child of node.children) {
+                    child.x = xCurrent;
+                    child.y = node.y + 100;
+                    adjustTree(child, level + 1, xCurrent, xSpacing / 2);
+                    xCurrent += xIncrement;
+                }
+            }
+        }
+
+        function setNodeValue() {
+            if (!selectedNode) return;
+
+            const value = prompt("Ingresa un valor para este nodo:");
+            if (value !== null && !isNaN(value)) {
+                selectedNode.value = parseInt(value, 10);
+            }
+
+            drawTree(customTree || tree);
+            hideContextMenu();
+        }
+
+        function deleteNode() {
+            if (!selectedNode || !customTree) return;
+
+            const parent = findParent(customTree, selectedNode);
+            if (parent) {
+                parent.children = parent.children.filter((child) => child !== selectedNode);
+                adjustTree(customTree);
+                drawTree(customTree);
+            }
+            hideContextMenu();
+        }
+
+        function findParent(root, node) {
+            const queue = [root];
+            while (queue.length) {
+                const current = queue.shift();
+                if (current.children.includes(node)) return current;
+                queue.push(...current.children);
+            }
+            return null;
+        }
+
+        function showContextMenu(x, y) {
+            contextMenu.style.left = `${x}px`;
+            contextMenu.style.top = `${y}px`;
+            contextMenu.style.display = "block";
+        }
+
+        function hideContextMenu() {
+            contextMenu.style.display = "none";
+        }
+
+        function runAlphaBeta(type) {
+            const treeToProcess = type === "example" ? tree : customTree;
+            if (!treeToProcess) {
+                alert(`Primero crea un árbol ${type === "example" ? "de ejemplo" : "personalizado"}.`);
+                return;
+            }
+            alphaBetaSteps = [];
+            calculateAlphaBeta(treeToProcess);
+            stepIndex = 0;
+            showAlphaBetaStepByStep(treeToProcess);
+        }
+
+        function calculateAlphaBeta(node, alpha = -Infinity, beta = Infinity) {
+            if (!node.children.length) {
+                return node.value;
+            }
+
+            let value = node.isMax ? -Infinity : Infinity;
+
+            for (const child of node.children) {
+                const childValue = calculateAlphaBeta(child, alpha, beta);
+
+                if (node.isMax) {
+                    value = Math.max(value, childValue);
+                    alpha = Math.max(alpha, value);
+                } else {
+                    value = Math.min(value, childValue);
+                    beta = Math.min(beta, value);
+                }
+
+                alphaBetaSteps.push({ node, child, alpha, beta });
+
+                if (beta <= alpha) break;
+            }
+
+            node.value = value;
+            return value;
+        }
+
+        function showAlphaBetaStepByStep(tree) {
+            if (stepIndex >= alphaBetaSteps.length) {
+                drawFinalResult(tree);
+                return;
+            }
+
+            const step = alphaBetaSteps[stepIndex];
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            drawTree(tree, step.child);
+
+            ctx.fillStyle = "black";
+            ctx.font = "12px Arial";
+            ctx.fillText(`α: ${step.alpha}`, step.node.x - 50, step.node.y + 10);
+            ctx.fillText(`β: ${step.beta}`, step.node.x + 30, step.node.y + 10);
+
+            stepIndex++;
+            setTimeout(() => showAlphaBetaStepByStep(tree), 1000);
+        }
+
+        function drawFinalResult(tree) {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            drawTree(tree);
+            ctx.fillStyle = "blue";
+            ctx.font = "16px Arial";
+            ctx.fillText(`Resultado final: ${tree.value}`, tree.x, tree.y - 50);
+        }
+
+        document.addEventListener("click", hideContextMenu);
+        document.addEventListener("contextmenu", (e) => e.preventDefault());
+    </script>
+</body>
+</html>
+
+
+
+
+
+
+
+
+
+
+
+
+
